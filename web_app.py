@@ -1,4 +1,4 @@
- #!/usr/bin/env python3
+  #!/usr/bin/env python3
   """
   NHL Injury Feed Web Application
   Serves injury data on a webpage that auto-refreshes every hour
