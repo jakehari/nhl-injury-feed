@@ -1,9 +1,17 @@
 from flask import Flask, render_template, jsonify
+import json
+from datetime import datetime
+from threading import Thread
+import time
+import schedule
+from simple_injury_scraper import scrape_hockey_reference_injuries
+
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    return "<h1>NHL Injury Feed</h1><p>Coming soon...</p>"
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+injury_data = {
+    'injuries': [],
+    'last_updated': None,
+    'total_count': 0,
+    'by_team': {},
+    'formatted_time': None
+}
