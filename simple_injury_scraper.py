@@ -17,9 +17,9 @@ def scrape_hockey_reference_injuries():
 
         if not injury_table:
             return [{
-                'player': 'No Data',
+                'player': 'No injury table found',
                 'team': 'N/A',
-                'injury_type': 'Website unavailable',
+                'injury_type': 'Website structure changed',
                 'injury_date': ''
             }]
 
@@ -32,7 +32,36 @@ def scrape_hockey_reference_injuries():
                 cells = row.find_all(['th', 'td'])
                 if len(cells) >= 4:
                     player = cells[0].get_text().strip()
-                    team = cells[1].get_text().str_
+                    team = cells[1].get_text().strip()
+                    injury_type = cells[2].get_text().strip()
+                    injury_date = cells[3].get_text().strip()
+
+                    if player and team:
+                        injuries.append({
+                            'player': player,
+                            'team': team,
+                            'injury_type': injury_type,
+                            'injury_date': injury_date
+                        })
+
+        if not injuries:
+            return [{
+                'player': 'No Current Injuries',
+                'team': 'NHL',
+                'injury_type': 'Clean bill of health',
+                'injury_date': datetime.now().strftime('%Y-%m-%d')
+            }]
+
+        return injuries[:50]
+
+    except Exception as e:
+        return [{
+            'player': 'Error',
+            'team': 'SYS',
+            'injury_type': f'Scraping failed: {str(e)}',
+            'injury_date': ''
+        }]
+
 
 
     
