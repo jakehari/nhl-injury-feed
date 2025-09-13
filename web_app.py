@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 NHL Injury Feed Web Application
 Serves injury data on a webpage with compact team grid layout
