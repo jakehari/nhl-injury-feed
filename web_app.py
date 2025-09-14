@@ -12,7 +12,7 @@ from datetime import datetime
 from threading import Thread
 import time
 import schedule
-from simple_injury_scraper import scrape_hockey_reference_injuries, format_injury_report
+from simple_injury_scraper import scrape_hockey_reference_injuries
 
 app = Flask(__name__)
 
