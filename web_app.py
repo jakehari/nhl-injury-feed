@@ -85,12 +85,16 @@ def create_team_grid_with_injuries():
     # Initialize all teams
     for team_code, team_info in NHL_TEAMS.items():
         grid_data[team_code] = {'name': team_info['name'], 'logo': team_info['logo'], 'division': team_info['division'], 'injuries': [], 'injury_count': 0}
-    # Add injury data to respective teams
-    for injury in injury_data['injuries']:
-        team_code = injury.get('team')
-        if team_code in grid_data:
-            grid_data[team_code]['injuries'].append(injury)
-            grid_data[team_code]['injury_count'] += 1
+# Add injury data to respective teams
+for injury in injury_data['injuries']:
+    team_code = injury.get('team', '').upper().strip()  # Ensure uppercase and clean
+    print(f"Processing injury: {injury.get('player')} - Team: '{team_code}'")  # Debug line
+    if team_code in grid_data:
+        grid_data[team_code]['injuries'].append(injury)
+        grid_data[team_code]['injury_count'] += 1
+        print(f"Added to {team_code}: {injury.get('player')}")  # Debug line
+    else:
+        print(f"Team code '{team_code}' not found in NHL_TEAMS")  # Debug line
     # Sort injuries within each team by reverse chronological order
     for team_code in grid_data:
         if grid_data[team_code]['injuries']:
