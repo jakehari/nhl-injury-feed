@@ -8,76 +8,264 @@
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 15px;
             background-color: #f5f5f5;
             color: #333;
         }
+
         .header {
             text-align: center;
             background: linear-gradient(135deg, #1e3c72, #2a5298);
             color: white;
-            padding: 30px;
-            border-radius: 10px;
-            margin-bottom: 30px;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
-        .header h1 { margin: 0; font-size: 2.5em; font-weight: 700; }
-        .stats { display: flex; justify-content: space-around; margin: 20px 0; flex-wrap: wrap; }
-        .stat-card {
-            background: white; padding: 20px; border-radius: 8px; text-align: center;
-            min-width: 150px; margin: 10px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        .stat-number { font-size: 2em; font-weight: bold; color: #d32f2f; }
-        .stat-label { color: #666; margin-top: 5px; }
-        .last-updated { text-align: center; color: #666; margin-bottom: 30px; font-style: italic; }
-        .refresh-info {
-            background: #e3f2fd; border: 1px solid #bbdefb; border-radius: 8px;
-            padding: 15px; margin: 20px 0; text-align: center;
-        }
-        .manual-refresh {
-            background: #1976d2; color: white; padding: 10px 20px; border: none;
-            border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-block; margin: 10px;
-        }
-        .manual-refresh:hover { background: #1565c0; }
 
-        /* Compact Team Grid Styles */
-        .team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; padding: 0 10px; }
+        .header h1 {
+            margin: 0;
+            font-size: 2em;
+            font-weight: 700;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            min-width: 120px;
+            margin: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-number {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #d32f2f;
+        }
+
+        .stat-label {
+            color: #666;
+            margin-top: 3px;
+            font-size: 0.9em;
+        }
+
+        .last-updated {
+            text-align: center;
+            color: #666;
+            margin-bottom: 20px;
+            font-style: italic;
+            font-size: 0.9em;
+        }
+
+        .refresh-info {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 6px;
+            padding: 10px;
+            margin: 15px 0;
+            text-align: center;
+            font-size: 0.9em;
+        }
+
+        .manual-refresh {
+            background: #1976d2;
+            color: white;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin: 5px;
+            font-size: 0.85em;
+        }
+
+        .manual-refresh:hover {
+            background: #1565c0;
+        }
+
+        /* Ultra Compact Team Grid - All teams visible */
+        .team-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 8px;
+            padding: 0 5px;
+        }
+
         .team-card {
-            background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            padding: 12px; border: 1px solid #e0e0e0; transition: all 0.3s ease; height: 280px;
-            overflow-y: auto; display: flex; flex-direction: column;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 8px;
+            border: 1px solid #e0e0e0;
+            transition: all 0.3s ease;
+            height: 180px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            font-size: 0.85em;
         }
-        .team-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15); border-color: #1976d2; }
-        .team-info { text-align: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #f0f0f0; flex-shrink: 0; }
-        .team-logo { font-size: 1.8em; display: block; margin-bottom: 5px; }
-        .team-code { font-size: 1.1em; font-weight: bold; color: #1976d2; margin-bottom: 2px; }
-        .team-name { font-size: 0.8em; color: #666; margin-bottom: 3px; }
-        .injury-count { font-size: 0.75em; color: #d32f2f; font-weight: 500; }
-        .team-injuries { flex-grow: 1; overflow-y: auto; }
-        .injury-entry { margin-bottom: 8px; padding: 6px 8px; background: #f8f9fa; border-radius: 4px; border-left: 2px solid #d32f2f; font-size: 0.8em; }
-        .injury-entry:last-child { margin-bottom: 0; }
-        .injury-entry .player-name { font-weight: 600; color: #1976d2; margin-bottom: 2px; }
-        .injury-entry .injury-type { color: #d32f2f; font-size: 0.9em; margin-bottom: 2px; }
-        .injury-meta { display: flex; justify-content: space-between; font-size: 0.75em; color: #666; }
-        .injury-date { font-style: italic; }
-        .injury-source { font-weight: 500; }
-        .no-team-injuries { text-align: center; padding: 20px; color: #4caf50; font-style: italic; font-size: 0.9em; }
-        .no-injuries { text-align: center; padding: 40px; color: #4caf50; font-size: 1.2em; }
-        .source-info { text-align: center; margin-top: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px; color: #666; }
+
+        .team-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+            border-color: #1976d2;
+        }
+
+        .team-info {
+            text-align: center;
+            margin-bottom: 6px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #f0f0f0;
+            flex-shrink: 0;
+        }
+
+        .team-logo {
+            font-size: 1.2em;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 2px;
+            color: #1976d2;
+        }
+
+        .team-code {
+            font-size: 0.9em;
+            font-weight: bold;
+            color: #1976d2;
+            margin-bottom: 1px;
+        }
+
+        .team-name {
+            font-size: 0.7em;
+            color: #666;
+            margin-bottom: 2px;
+        }
+
+        .injury-count {
+            font-size: 0.65em;
+            color: #d32f2f;
+            font-weight: 500;
+        }
+
+        .team-injuries {
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        .injury-entry {
+            margin-bottom: 4px;
+            padding: 4px 6px;
+            background: #f8f9fa;
+            border-radius: 3px;
+            border-left: 2px solid #d32f2f;
+            font-size: 0.75em;
+        }
+
+        .injury-entry:last-child {
+            margin-bottom: 0;
+        }
+
+        .injury-entry .player-name {
+            font-weight: 600;
+            color: #1976d2;
+            margin-bottom: 1px;
+        }
+
+        .injury-entry .injury-type {
+            color: #d32f2f;
+            font-size: 0.9em;
+            margin-bottom: 1px;
+        }
+
+        .injury-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7em;
+            color: #666;
+        }
+
+        .injury-date {
+            font-style: italic;
+        }
+
+        .injury-source {
+            font-weight: 500;
+        }
+
+        .no-team-injuries {
+            text-align: center;
+            padding: 15px 5px;
+            color: #4caf50;
+            font-style: italic;
+            font-size: 0.8em;
+        }
+
+        .no-injuries {
+            text-align: center;
+            padding: 30px;
+            color: #4caf50;
+            font-size: 1.1em;
+        }
+
+        .source-info {
+            text-align: center;
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            color: #666;
+            font-size: 0.85em;
+        }
+
+        @media (max-width: 1200px) {
+            .team-grid {
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            }
+
+            .team-card {
+                height: 160px;
+                font-size: 0.8em;
+            }
+        }
+
         @media (max-width: 768px) {
-            .stats { flex-direction: column; }
-            .team-grid { grid-template-columns: 1fr; gap: 15px; }
-            .team-card { height: 250px; }
+            .stats {
+                flex-direction: column;
+            }
+
+            .team-grid {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                gap: 6px;
+            }
+
+            .team-card {
+                height: 140px;
+                font-size: 0.75em;
+            }
         }
-        .loading { text-align: center; padding: 20px; color: #666; }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>🏒 NHL Injury Feed</h1>
-        <p>Compact team grid with live injury tracking</p>
+        <p>Ultra-compact team grid - All teams visible</p>
     </div>
 
     <div class="stats">
@@ -96,55 +284,62 @@
     </div>
 
     {% if data.last_updated %}
-    <div class="last-updated">📅 Last Updated: {{ data.formatted_time }}</div>
+    <div class="last-updated">
+        📅 Last Updated: {{ data.formatted_time }}
+    </div>
     {% endif %}
 
     <div class="refresh-info">
-        🔄 This page automatically refreshes every hour<br>
+        🔄 Auto-refresh every hour
         <a href="/api/refresh" class="manual-refresh">Manual Refresh</a>
-        <a href="/api/injuries" class="manual-refresh">View JSON Data</a>
+        <a href="/api/injuries" class="manual-refresh">JSON Data</a>
     </div>
 
     {% if data.team_grid %}
-    <!-- Compact Team Grid - All Teams Visible -->
-    <div class="team-grid">
-        {% for team in data.team_grid %}
-        <div class="team-card">
-            <div class="team-info">
-                <div class="team-logo">{{ team.logo }}</div>
-                <div class="team-code">{{ team.code }}</div>
-                <div class="team-name">{{ team.name }}</div>
-                <div class="injury-count">{{ team.injury_count }} injured</div>
-            </div>
-
-            {% if team.injuries %}
-            <div class="team-injuries">
-                {% for injury in team.injuries %}
-                <div class="injury-entry">
-                    <div class="player-name">{{ injury.player }}</div>
-                    <div class="injury-type">{{ injury.injury_type }}</div>
-                    <div class="injury-meta">
-                        {% if injury.injury_date %}
-                        <span class="injury-date">{{ injury.injury_date }}</span>
-                        {% endif %}
-                        <span class="injury-source">{{ injury.source }}</span>
-                    </div>
+        <!-- Ultra Compact Team Grid - All Teams Visible -->
+        <div class="team-grid">
+            {% for team in data.team_grid %}
+            <div class="team-card">
+                <div class="team-info">
+                    <div class="team-logo">{{ team.logo }}</div>
+                    <div class="team-name">{{ team.name }}</div>
+                    <div class="injury-count">{{ team.injury_count }} injured</div>
                 </div>
-                {% endfor %}
+
+                {% if team.injuries %}
+                <div class="team-injuries">
+                    {% for injury in team.injuries %}
+                    <div class="injury-entry">
+                        <div class="player-name">{{ injury.player }}</div>
+                        <div class="injury-type">{{ injury.injury_type }}</div>
+                        <div class="injury-meta">
+                            {% if injury.injury_date %}
+                            <span class="injury-date">{{ injury.injury_date }}</span>
+                            {% endif %}
+                            <span class="injury-source">{{ injury.source }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="no-team-injuries">
+                    ✅ No injuries
+                </div>
+                {% endif %}
             </div>
-            {% else %}
-            <div class="no-team-injuries">✅ No injuries</div>
-            {% endif %}
+            {% endfor %}
         </div>
-        {% endfor %}
-    </div>
     {% else %}
-    <div class="no-injuries">✅ No current injuries reported</div>
+        <div class="no-injuries">
+            ✅ No current injuries reported
+        </div>
     {% endif %}
 
     <div class="source-info">
-        📊 Data sourced from Hockey-Reference.com<br>
-        🔄 Updates every hour automatically<br>
+        📊 Data sourced from Hockey-Reference.com
+        <br>
+        🔄 Updates every hour automatically
+        <br>
         💻 <a href="https://github.com/jakehari/nhl-injury-feed" style="color: #1976d2;">View Source Code</a>
     </div>
 
@@ -157,10 +352,14 @@
                     e.preventDefault();
                     this.textContent = 'Refreshing...';
                     fetch('/api/refresh')
-                        .then(() => { window.location.reload(); })
+                        .then(() => {
+                            window.location.reload();
+                        })
                         .catch(() => {
                             this.textContent = 'Refresh Failed';
-                            setTimeout(() => { this.textContent = 'Manual Refresh'; }, 2000);
+                            setTimeout(() => {
+                                this.textContent = 'Manual Refresh';
+                            }, 2000);
                         });
                 });
             });
