@@ -6,8 +6,6 @@ Serves injury data on a webpage with compact team grid layout
 """
 
 from flask import Flask, render_template, jsonify
-import json
-import os
 from datetime import datetime
 from threading import Thread
 import time
@@ -25,7 +23,7 @@ injury_data = {
     'team_grid': []
 }
 
-# NHL Team Information with logos and divisions
+# NHL Team Information with simple text logos (no problematic emojis)
 NHL_TEAMS = {
     'ANA': {'name': 'Anaheim Ducks', 'logo': 'ANA', 'division': 'Pacific'},
     'BOS': {'name': 'Boston Bruins', 'logo': 'BOS', 'division': 'Atlantic'},
@@ -66,14 +64,12 @@ def sort_injuries_by_date(injuries):
     def get_sort_key(injury):
         injury_date = injury.get('injury_date', '')
         scraped_at = injury.get('scraped_at', '')
-        # Try to parse injury_date first, then scraped_at, then current time
         for date_str in [injury_date, scraped_at]:
             if date_str:
                 try:
                     if 'T' in date_str:  # ISO format
                         return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-                    else:  # Simple date format
-                        return datetime.strptime(date_str, '%Y-%m-%d')
+                    return datetime.strptime(date_str, '%Y-%m-%d')
                 except (ValueError, TypeError):
                     continue
         return datetime.now()
@@ -84,17 +80,23 @@ def create_team_grid_with_injuries():
     grid_data = {}
     # Initialize all teams
     for team_code, team_info in NHL_TEAMS.items():
-        grid_data[team_code] = {'name': team_info['name'], 'logo': team_info['logo'], 'division': team_info['division'], 'injuries': [], 'injury_count': 0}
-# Add injury data to respective teams
-for injury in injury_data['injuries']:
-    team_code = injury.get('team', '').upper().strip()  # Ensure uppercase and clean
-    print(f"Processing injury: {injury.get('player')} - Team: '{team_code}'")  # Debug line
-    if team_code in grid_data:
-        grid_data[team_code]['injuries'].append(injury)
-        grid_data[team_code]['injury_count'] += 1
-        print(f"Added to {team_code}: {injury.get('player')}")  # Debug line
-    else:
-        print(f"Team code '{team_code}' not found in NHL_TEAMS")  # Debug line
+        grid_data[team_code] = {
+            'name': team_info['name'],
+            'logo': team_info['logo'],
+            'division': team_info['division'],
+            'injuries': [],
+            'injury_count': 0
+        }
+    # Add injury data to respective teams
+    for injury in injury_data['injuries']:
+        team_code = injury.get('team', '').upper().strip()
+        print(f"Processing injury: {injury.get('player')} - Team: '{team_code}'")
+        if team_code in grid_data:
+            grid_data[team_code]['injuries'].append(injury)
+            grid_data[team_code]['injury_count'] += 1
+            print(f"Added to {team_code}: {injury.get('player')}")
+        else:
+            print(f"Team code '{team_code}' not found in NHL_TEAMS")
     # Sort injuries within each team by reverse chronological order
     for team_code in grid_data:
         if grid_data[team_code]['injuries']:
@@ -116,10 +118,8 @@ def update_injury_data():
         by_team = {}
         for injury in injuries:
             team = injury.get('team', 'UNK')
-            if team not in by_team:
-                by_team[team] = []
-            by_team[team].append(injury)
-        # Sort injuries by team in reverse chronological order
+            by_team.setdefault(team, []).append(injury)
+        # Sort per team
         for team in by_team:
             by_team[team] = sort_injuries_by_date(by_team[team])
         # Update global data
@@ -144,7 +144,7 @@ def schedule_updates():
     schedule.every().hour.do(update_injury_data)
     while True:
         schedule.run_pending()
-        time.sleep(60)
+        time.sleep(60)  # Check every minute
 
 @app.route('/')
 def index():
@@ -168,8 +168,10 @@ def health():
     return jsonify({'status': 'healthy', 'last_updated': injury_data['last_updated'], 'injury_count': injury_data['total_count']})
 
 if __name__ == '__main__':
+    # Initial data load
     print("🚀 Starting NHL Injury Feed Web App...")
     update_injury_data()
+    # Start background scheduler
     scheduler_thread = Thread(target=schedule_updates, daemon=True)
     scheduler_thread.start()
     print("🌐 Web app starting on http://localhost:5000")
