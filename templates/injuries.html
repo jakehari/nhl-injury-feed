@@ -54,6 +54,10 @@
             color: #d32f2f;
         }
 
+        .stat-number.possible {
+            color: #f57c00;
+        }
+
         .stat-label {
             color: #666;
             margin-top: 3px;
@@ -95,6 +99,24 @@
             background: #1565c0;
         }
 
+        .legend {
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 10px;
+            margin: 15px 0;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            font-size: 0.85em;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
         /* Ultra Compact Team Grid - All teams visible */
         .team-grid {
             display: grid;
@@ -110,7 +132,7 @@
             padding: 8px;
             border: 1px solid #e0e0e0;
             transition: all 0.3s ease;
-            height: 180px;
+            height: 200px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
@@ -152,9 +174,18 @@
             margin-bottom: 2px;
         }
 
-        .injury-count {
+        .injury-counts {
             font-size: 0.65em;
+            color: #666;
+        }
+
+        .confirmed-count {
             color: #d32f2f;
+            font-weight: 500;
+        }
+
+        .possible-count {
+            color: #f57c00;
             font-weight: 500;
         }
 
@@ -168,12 +199,41 @@
             padding: 4px 6px;
             background: #f8f9fa;
             border-radius: 3px;
-            border-left: 2px solid #d32f2f;
             font-size: 0.75em;
+            display: flex;
+            align-items: flex-start;
+            gap: 4px;
         }
 
         .injury-entry:last-child {
             margin-bottom: 0;
+        }
+
+        .injury-entry.confirmed {
+            border-left: 2px solid #d32f2f;
+        }
+
+        .injury-entry.possible {
+            border-left: 2px solid #f57c00;
+            background: #fff8e1;
+        }
+
+        .injury-icon {
+            font-size: 0.9em;
+            margin-top: 1px;
+            flex-shrink: 0;
+        }
+
+        .injury-icon.confirmed {
+            color: #d32f2f;
+        }
+
+        .injury-icon.possible {
+            color: #f57c00;
+        }
+
+        .injury-details {
+            flex-grow: 1;
         }
 
         .injury-entry .player-name {
@@ -183,9 +243,17 @@
         }
 
         .injury-entry .injury-type {
-            color: #d32f2f;
+            color: #666;
             font-size: 0.9em;
             margin-bottom: 1px;
+        }
+
+        .injury-entry.confirmed .injury-type {
+            color: #d32f2f;
+        }
+
+        .injury-entry.possible .injury-type {
+            color: #f57c00;
         }
 
         .injury-meta {
@@ -200,6 +268,15 @@
         }
 
         .injury-source {
+            font-weight: 500;
+        }
+
+        .confidence {
+            background: #e8f5e8;
+            color: #2e7d32;
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-size: 0.7em;
             font-weight: 500;
         }
 
@@ -234,7 +311,7 @@
             }
 
             .team-card {
-                height: 160px;
+                height: 180px;
                 font-size: 0.8em;
             }
         }
@@ -244,13 +321,18 @@
                 flex-direction: column;
             }
 
+            .legend {
+                flex-direction: column;
+                gap: 10px;
+            }
+
             .team-grid {
                 grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
                 gap: 6px;
             }
 
             .team-card {
-                height: 140px;
+                height: 160px;
                 font-size: 0.75em;
             }
         }
@@ -265,13 +347,17 @@
 <body>
     <div class="header">
         <h1>🏒 NHL Injury Feed</h1>
-        <p>Ultra-compact team grid - All teams visible</p>
+        <p>Confirmed injuries + Possible injury detection via ice time analysis</p>
     </div>
 
     <div class="stats">
         <div class="stat-card">
             <div class="stat-number">{{ data.total_count }}</div>
-            <div class="stat-label">Total Injuries</div>
+            <div class="stat-label">Confirmed Injuries</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number possible">{{ data.possible_count or 0 }}</div>
+            <div class="stat-label">Possible Injuries</div>
         </div>
         <div class="stat-card">
             <div class="stat-number">{{ data.by_team|length }}</div>
@@ -280,6 +366,17 @@
         <div class="stat-card">
             <div class="stat-number">32</div>
             <div class="stat-label">Teams Visible</div>
+        </div>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item">
+            <span style="color: #d32f2f; font-weight: bold;">🏥</span>
+            <span>Confirmed Injury (Official Report)</span>
+        </div>
+        <div class="legend-item">
+            <span style="color: #f57c00; font-weight: bold;">⚠️</span>
+            <span>Possible Injury (Low Ice Time)</span>
         </div>
     </div>
 
@@ -303,29 +400,61 @@
                 <div class="team-info">
                     <div class="team-logo">{{ team.logo }}</div>
                     <div class="team-name">{{ team.name }}</div>
-                    <div class="injury-count">{{ team.injury_count }} injured</div>
+                    <div class="injury-counts">
+                        {% if team.injury_count > 0 %}
+                        <span class="confirmed-count">{{ team.injury_count }} confirmed</span>
+                        {% endif %}
+                        {% if team.possible_count > 0 %}
+                        {% if team.injury_count > 0 %} | {% endif %}
+                        <span class="possible-count">{{ team.possible_count }} possible</span>
+                        {% endif %}
+                        {% if team.injury_count == 0 and team.possible_count == 0 %}
+                        <span style="color: #4caf50;">Healthy</span>
+                        {% endif %}
+                    </div>
                 </div>
 
-                {% if team.injuries %}
                 <div class="team-injuries">
-                    {% for injury in team.injuries %}
-                    <div class="injury-entry">
-                        <div class="player-name">{{ injury.player }}</div>
-                        <div class="injury-type">{{ injury.injury_type }}</div>
-                        <div class="injury-meta">
-                            {% if injury.injury_date %}
-                            <span class="injury-date">{{ injury.injury_date }}</span>
-                            {% endif %}
-                            <span class="injury-source">{{ injury.source }}</span>
+                    {% for injury in team.confirmed_injuries %}
+                    <div class="injury-entry confirmed">
+                        <div class="injury-icon confirmed">🏥</div>
+                        <div class="injury-details">
+                            <div class="player-name">{{ injury.player }}</div>
+                            <div class="injury-type">{{ injury.injury_type }}</div>
+                            <div class="injury-meta">
+                                {% if injury.injury_date %}
+                                <span class="injury-date">{{ injury.injury_date }}</span>
+                                {% endif %}
+                                <span class="injury-source">{{ injury.source or 'Official' }}</span>
+                            </div>
                         </div>
                     </div>
                     {% endfor %}
+
+                    {% for injury in team.possible_injuries %}
+                    <div class="injury-entry possible">
+                        <div class="injury-icon possible">⚠️</div>
+                        <div class="injury-details">
+                            <div class="player-name">{{ injury.player }}</div>
+                            <div class="injury-type">{{ injury.reason }}</div>
+                            <div class="injury-meta">
+                                {% if injury.game_date %}
+                                <span class="injury-date">{{ injury.game_date }}</span>
+                                {% endif %}
+                                {% if injury.confidence %}
+                                <span class="confidence">{{ injury.confidence }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    {% if team.injury_count == 0 and team.possible_count == 0 %}
+                    <div class="no-team-injuries">
+                        ✅ No injuries detected
+                    </div>
+                    {% endif %}
                 </div>
-                {% else %}
-                <div class="no-team-injuries">
-                    ✅ No injuries
-                </div>
-                {% endif %}
             </div>
             {% endfor %}
         </div>
@@ -336,7 +465,7 @@
     {% endif %}
 
     <div class="source-info">
-        📊 Data sourced from Hockey-Reference.com
+        📊 Confirmed: Hockey-Reference.com | Possible: NHL Stats API (Ice Time Analysis)
         <br>
         🔄 Updates every hour automatically
         <br>
