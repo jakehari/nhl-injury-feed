@@ -1,366 +1,547 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-NHL Injury Feed Web Application
-Serves injury data on a webpage with compact team grid layout
-"""
-
-from flask import Flask, render_template, jsonify
-import json
-import os
-import requests
-from datetime import datetime, timedelta
-from threading import Thread
-import time
-import schedule
-from simple_injury_scraper import scrape_hockey_reference_injuries
-
-app = Flask(__name__)
-
-# Global data storage
-injury_data = {
-    'injuries': [],
-    'possible_injuries': [],
-    'last_updated': None,
-    'total_count': 0,
-    'by_team': {},
-    'team_grid': []
-}
-
-# NHL Team Information with simple text logos
-NHL_TEAMS = {
-    'ANA': {'name': 'Anaheim Ducks', 'logo': 'ANA', 'division': 'Pacific'},
-    'BOS': {'name': 'Boston Bruins', 'logo': 'BOS', 'division': 'Atlantic'},
-    'BUF': {'name': 'Buffalo Sabres', 'logo': 'BUF', 'division': 'Atlantic'},
-    'CGY': {'name': 'Calgary Flames', 'logo': 'CGY', 'division': 'Pacific'},
-    'CAR': {'name': 'Carolina Hurricanes', 'logo': 'CAR', 'division': 'Metropolitan'},
-    'CHI': {'name': 'Chicago Blackhawks', 'logo': 'CHI', 'division': 'Central'},
-    'COL': {'name': 'Colorado Avalanche', 'logo': 'COL', 'division': 'Central'},
-    'CBJ': {'name': 'Columbus Blue Jackets', 'logo': 'CBJ', 'division': 'Metropolitan'},
-    'DAL': {'name': 'Dallas Stars', 'logo': 'DAL', 'division': 'Central'},
-    'DET': {'name': 'Detroit Red Wings', 'logo': 'DET', 'division': 'Atlantic'},
-    'EDM': {'name': 'Edmonton Oilers', 'logo': 'EDM', 'division': 'Pacific'},
-    'FLA': {'name': 'Florida Panthers', 'logo': 'FLA', 'division': 'Atlantic'},
-    'LAK': {'name': 'Los Angeles Kings', 'logo': 'LAK', 'division': 'Pacific'},
-    'MIN': {'name': 'Minnesota Wild', 'logo': 'MIN', 'division': 'Central'},
-    'MTL': {'name': 'Montreal Canadiens', 'logo': 'MTL', 'division': 'Atlantic'},
-    'NSH': {'name': 'Nashville Predators', 'logo': 'NSH', 'division': 'Central'},
-    'NJD': {'name': 'New Jersey Devils', 'logo': 'NJD', 'division': 'Metropolitan'},
-    'NYI': {'name': 'New York Islanders', 'logo': 'NYI', 'division': 'Metropolitan'},
-    'NYR': {'name': 'New York Rangers', 'logo': 'NYR', 'division': 'Metropolitan'},
-    'OTT': {'name': 'Ottawa Senators', 'logo': 'OTT', 'division': 'Atlantic'},
-    'PHI': {'name': 'Philadelphia Flyers', 'logo': 'PHI', 'division': 'Metropolitan'},
-    'PIT': {'name': 'Pittsburgh Penguins', 'logo': 'PIT', 'division': 'Metropolitan'},
-    'SJS': {'name': 'San Jose Sharks', 'logo': 'SJS', 'division': 'Pacific'},
-    'SEA': {'name': 'Seattle Kraken', 'logo': 'SEA', 'division': 'Pacific'},
-    'STL': {'name': 'St. Louis Blues', 'logo': 'STL', 'division': 'Central'},
-    'TBL': {'name': 'Tampa Bay Lightning', 'logo': 'TBL', 'division': 'Atlantic'},
-    'TOR': {'name': 'Toronto Maple Leafs', 'logo': 'TOR', 'division': 'Atlantic'},
-    'UTA': {'name': 'Utah Hockey Club', 'logo': 'UTA', 'division': 'Central'},
-    'VAN': {'name': 'Vancouver Canucks', 'logo': 'VAN', 'division': 'Pacific'},
-    'VGK': {'name': 'Vegas Golden Knights', 'logo': 'VGK', 'division': 'Pacific'},
-    'WSH': {'name': 'Washington Capitals', 'logo': 'WSH', 'division': 'Metropolitan'},
-    'WPG': {'name': 'Winnipeg Jets', 'logo': 'WPG', 'division': 'Central'}
-}
-
-# Team name mapping
-TEAM_NAME_TO_CODE = {
-    'Anaheim Ducks': 'ANA',
-    'Boston Bruins': 'BOS',
-    'Buffalo Sabres': 'BUF',
-    'Calgary Flames': 'CGY',
-    'Carolina Hurricanes': 'CAR',
-    'Chicago Blackhawks': 'CHI',
-    'Colorado Avalanche': 'COL',
-    'Columbus Blue Jackets': 'CBJ',
-    'Dallas Stars': 'DAL',
-    'Detroit Red Wings': 'DET',
-    'Edmonton Oilers': 'EDM',
-    'Florida Panthers': 'FLA',
-    'Los Angeles Kings': 'LAK',
-    'Minnesota Wild': 'MIN',
-    'Montreal Canadiens': 'MTL',
-    'Nashville Predators': 'NSH',
-    'New Jersey Devils': 'NJD',
-    'New York Islanders': 'NYI',
-    'New York Rangers': 'NYR',
-    'Ottawa Senators': 'OTT',
-    'Philadelphia Flyers': 'PHI',
-    'Pittsburgh Penguins': 'PIT',
-    'San Jose Sharks': 'SJS',
-    'Seattle Kraken': 'SEA',
-    'St. Louis Blues': 'STL',
-    'Tampa Bay Lightning': 'TBL',
-    'Toronto Maple Leafs': 'TOR',
-    'Utah Hockey Club': 'UTA',
-    'Vancouver Canucks': 'VAN',
-    'Vegas Golden Knights': 'VGK',
-    'Washington Capitals': 'WSH',
-    'Winnipeg Jets': 'WPG'
-}
-
-def get_team_id_from_code(team_code):
-    """Convert team code to NHL API team ID"""
-    team_id_mapping = {
-        'ANA': 24, 'BOS': 6, 'BUF': 7, 'CGY': 20, 'CAR': 12, 'CHI': 16, 'COL': 21,
-        'CBJ': 29, 'DAL': 25, 'DET': 17, 'EDM': 22, 'FLA': 13, 'LAK': 26, 'MIN': 30,
-        'MTL': 8, 'NSH': 18, 'NJD': 1, 'NYI': 2, 'NYR': 3, 'OTT': 9, 'PHI': 4,
-        'PIT': 5, 'SJS': 28, 'SEA': 55, 'STL': 19, 'TBL': 14, 'TOR': 10, 'UTA': 53,
-        'VAN': 23, 'VGK': 54, 'WSH': 15, 'WPG': 52
-    }
-    return team_id_mapping.get(team_code)
-
-def analyze_ice_time_for_possible_injuries():
-    """Analyze recent games for unusual ice time drops that might indicate injury"""
-    possible_injuries = []
-    
-    try:
-        # Get today's date and look back a few days
-        today = datetime.now()
-        
-        for team_code in NHL_TEAMS.keys():
-            team_id = get_team_id_from_code(team_code)
-            if not team_id:
-                continue
-            
-            # Get recent games for this team
-            schedule_url = f"https://api-web.nhle.com/v1/club-schedule-season/{team_id}/20242025"
-            
-            try:
-                response = requests.get(schedule_url, timeout=10)
-                if response.status_code == 200:
-                    schedule_data = response.json()
-                    
-                    # Find recent completed games
-                    recent_games = []
-                    for game in schedule_data.get('games', []):
-                        game_date = datetime.strptime(game.get('gameDate', ''), '%Y-%m-%d')
-                        if game.get('gameState') == 'OFF' and game_date >= today - timedelta(days=7):
-                            recent_games.append(game)
-                    
-                    # Sort by most recent first
-                    recent_games.sort(key=lambda x: x.get('gameDate', ''), reverse=True)
-                    
-                    if len(recent_games) >= 2:
-                        # Analyze the most recent game
-                        latest_game = recent_games[0]
-                        game_id = latest_game.get('id')
-                        
-                        if game_id:
-                            # Get detailed game stats
-                            game_url = f"https://api-web.nhle.com/v1/gamecenter/{game_id}/boxscore"
-                            game_response = requests.get(game_url, timeout=10)
-                            
-                            if game_response.status_code == 200:
-                                game_data = game_response.json()
-                                
-                                # Analyze players' ice time
-                                team_stats = None
-                                if game_data.get('homeTeam', {}).get('id') == team_id:
-                                    team_stats = game_data.get('homeTeam', {})
-                                elif game_data.get('awayTeam', {}).get('id') == team_id:
-                                    team_stats = game_data.get('awayTeam', {})
-                                
-                                if team_stats:
-                                    forwards = team_stats.get('forwards', [])
-                                    defensemen = team_stats.get('defensemen', [])
-                                    all_players = forwards + defensemen
-                                    
-                                    for player in all_players:
-                                        ice_time_str = player.get('toi', '0:00')
-                                        if ':' in ice_time_str:
-                                            minutes, seconds = ice_time_str.split(':')
-                                            ice_time_minutes = int(minutes) + int(seconds) / 60
-                                            
-                                            # Flag players with unusually low ice time
-                                            # These thresholds can be adjusted
-                                            position = 'F' if player in forwards else 'D'
-                                            min_threshold = 12 if position == 'F' else 15  # Minutes
-                                            
-                                            # Only flag if they played but very little
-                                            if 0 < ice_time_minutes < min_threshold:
-                                                possible_injury = {
-                                                    'player': player.get('name', {}).get('default', 'Unknown'),
-                                                    'team': team_code,
-                                                    'ice_time': ice_time_str,
-                                                    'position': position,
-                                                    'game_date': latest_game.get('gameDate'),
-                                                    'reason': f'Low ice time ({ice_time_str}) for {position}',
-                                                    'confidence': 'Medium',
-                                                    'type': 'possible',
-                                                    'source': 'Ice Time Analysis'
-                                                }
-                                                possible_injuries.append(possible_injury)
-                                                print(f"⚠️ Possible injury: {possible_injury['player']} ({team_code}) - {ice_time_str}")
-            
-            except Exception as e:
-                print(f"Error analyzing {team_code}: {e}")
-                continue
-    
-    except Exception as e:
-        print(f"Error in ice time analysis: {e}")
-    
-    return possible_injuries
-
-def sort_injuries_by_date(injuries):
-    """Sort injuries in reverse chronological order"""
-    def get_sort_key(injury):
-        injury_date = injury.get('injury_date', '')
-        scraped_at = injury.get('scraped_at', '')
-        game_date = injury.get('game_date', '')
-        
-        for date_str in [injury_date, scraped_at, game_date]:
-            if date_str:
-                try:
-                    if 'T' in date_str:
-                        return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-                    else:
-                        return datetime.strptime(date_str, '%Y-%m-%d')
-                except (ValueError, TypeError):
-                    continue
-        
-        return datetime.now()
-    
-    return sorted(injuries, key=get_sort_key, reverse=True)
-
-def create_team_grid_with_injuries():
-    """Create compact team grid with both confirmed and possible injuries"""
-    grid_data = {}
-    
-    for team_code, team_info in NHL_TEAMS.items():
-        grid_data[team_code] = {
-            'name': team_info['name'],
-            'logo': team_info['logo'],
-            'division': team_info['division'],
-            'confirmed_injuries': [],
-            'possible_injuries': [],
-            'injury_count': 0,
-            'possible_count': 0
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NHL Injury Feed</title>
+    <meta http-equiv="refresh" content="3600"> <!-- Auto-refresh every hour -->
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 15px;
+            background-color: #f5f5f5;
+            color: #333;
         }
-    
-    # Add confirmed injuries
-    for injury in injury_data['injuries']:
-        team_name = injury.get('team', '').strip()
-        team_code = TEAM_NAME_TO_CODE.get(team_name, team_name.upper())
-        if team_code in grid_data:
-            injury['type'] = 'confirmed'
-            grid_data[team_code]['confirmed_injuries'].append(injury)
-            grid_data[team_code]['injury_count'] += 1
-    
-    # Add possible injuries
-    for injury in injury_data['possible_injuries']:
-        team_code = injury.get('team', '').strip()
-        if team_code in grid_data:
-            injury['type'] = 'possible'
-            grid_data[team_code]['possible_injuries'].append(injury)
-            grid_data[team_code]['possible_count'] += 1
-    
-    # Sort injuries within each team
-    for team_code in grid_data:
-        if grid_data[team_code]['confirmed_injuries']:
-            grid_data[team_code]['confirmed_injuries'] = sort_injuries_by_date(grid_data[team_code]['confirmed_injuries'])
-        if grid_data[team_code]['possible_injuries']:
-            grid_data[team_code]['possible_injuries'] = sort_injuries_by_date(grid_data[team_code]['possible_injuries'])
-    
-    all_teams = []
-    for team_code, team_data in grid_data.items():
-        all_teams.append({
-            'code': team_code,
-            **team_data
-        })
-    
-    all_teams.sort(key=lambda x: x['name'])
-    
-    return all_teams
 
-def update_injury_data():
-    """Update injury data including ice time analysis"""
-    global injury_data
-    
-    print(f"Updating injury data at {datetime.now()}")
-    
-    try:
-        # Get confirmed injuries from scraper
-        injuries = scrape_hockey_reference_injuries()
-        
-        # Get possible injuries from ice time analysis
-        print("🔍 Analyzing ice time for possible injuries...")
-        possible_injuries = analyze_ice_time_for_possible_injuries()
-        
-        # Process confirmed injuries by team
-        by_team = {}
-        for injury in injuries:
-            team = injury['team']
-            if team not in by_team:
-                by_team[team] = []
-            by_team[team].append(injury)
-        
-        for team in by_team:
-            by_team[team] = sort_injuries_by_date(by_team[team])
-        
-        # Update global data
-        injury_data = {
-            'injuries': injuries,
-            'possible_injuries': possible_injuries,
-            'last_updated': datetime.now().isoformat(),
-            'total_count': len(injuries),
-            'possible_count': len(possible_injuries),
-            'by_team': by_team,
-            'formatted_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        .header {
+            text-align: center;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
-        
-        injury_data['team_grid'] = create_team_grid_with_injuries()
-        
-        print(f"✅ Updated with {len(injuries)} confirmed injuries and {len(possible_injuries)} possible injuries")
-    
-    except Exception as e:
-        print(f"Error updating injury data: {e}")
-        if 'injuries' not in injury_data:
-            injury_data['injuries'] = []
-        if 'possible_injuries' not in injury_data:
-            injury_data['possible_injuries'] = []
-        injury_data['team_grid'] = create_team_grid_with_injuries()
 
-def schedule_updates():
-    """Background thread for updates"""
-    schedule.every().hour.do(update_injury_data)
-    
-    while True:
-        schedule.run_pending()
-        time.sleep(60)
+        .header h1 {
+            margin: 0;
+            font-size: 2em;
+            font-weight: 700;
+        }
 
-@app.route('/')
-def index():
-    """Main page"""
-    return render_template('injuries.html', data=injury_data)
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
 
-@app.route('/api/injuries')
-def api_injuries():
-    """API endpoint"""
-    return jsonify(injury_data)
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            min-width: 120px;
+            margin: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
 
-@app.route('/api/refresh')
-def api_refresh():
-    """Manual refresh"""
-    update_injury_data()
-    return jsonify({'status': 'updated', 'timestamp': injury_data['last_updated']})
+        .stat-number {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #d32f2f;
+        }
 
-@app.route('/health')
-def health():
-    """Health check"""
-    return jsonify({
-        'status': 'healthy',
-        'last_updated': injury_data['last_updated'],
-        'injury_count': injury_data['total_count'],
-        'possible_count': injury_data.get('possible_count', 0)
-    })
+        .stat-number.possible {
+            color: #f57c00;
+        }
 
-if __name__ == '__main__':
-    print("Starting NHL Injury Feed Web App...")
-    update_injury_data()
-    
-    scheduler_thread = Thread(target=schedule_updates, daemon=True)
-    scheduler_thread.start()
-    
-    print("Web app starting on http://localhost:5000")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+        .stat-label {
+            color: #666;
+            margin-top: 3px;
+            font-size: 0.9em;
+        }
+
+        .last-updated {
+            text-align: center;
+            color: #666;
+            margin-bottom: 20px;
+            font-style: italic;
+            font-size: 0.9em;
+        }
+
+        .refresh-info {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 6px;
+            padding: 10px;
+            margin: 15px 0;
+            text-align: center;
+            font-size: 0.9em;
+        }
+
+        .manual-refresh {
+            background: #1976d2;
+            color: white;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin: 5px;
+            font-size: 0.85em;
+        }
+
+        .manual-refresh:hover {
+            background: #1565c0;
+        }
+
+        .legend {
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 10px;
+            margin: 15px 0;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            font-size: 0.85em;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* Ultra Compact Team Grid - All teams visible */
+        .team-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 8px;
+            padding: 0 5px;
+        }
+
+        .team-card {
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 8px;
+            border: 1px solid #e0e0e0;
+            transition: all 0.3s ease;
+            height: 220px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            font-size: 0.85em;
+        }
+
+        .team-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+            border-color: #1976d2;
+        }
+
+        .team-info {
+            text-align: center;
+            margin-bottom: 6px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #f0f0f0;
+            flex-shrink: 0;
+        }
+
+        .team-logo {
+            font-size: 1.2em;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 2px;
+            color: #1976d2;
+        }
+
+        .team-code {
+            font-size: 0.9em;
+            font-weight: bold;
+            color: #1976d2;
+            margin-bottom: 1px;
+        }
+
+        .team-name {
+            font-size: 0.7em;
+            color: #666;
+            margin-bottom: 2px;
+        }
+
+        .injury-counts {
+            font-size: 0.65em;
+            color: #666;
+        }
+
+        .confirmed-count {
+            color: #d32f2f;
+            font-weight: 500;
+        }
+
+        .possible-count {
+            color: #f57c00;
+            font-weight: 500;
+        }
+
+        .team-injuries {
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        .injury-entry {
+            margin-bottom: 6px;
+            padding: 6px 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-size: 0.75em;
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+        }
+
+        .injury-entry:last-child {
+            margin-bottom: 0;
+        }
+
+        .injury-entry.confirmed {
+            border-left: 3px solid #d32f2f;
+        }
+
+        .injury-entry.possible {
+            border-left: 3px solid #f57c00;
+            background: #fff8e1;
+        }
+
+        .injury-icon {
+            font-size: 0.9em;
+            margin-top: 1px;
+            flex-shrink: 0;
+        }
+
+        .injury-icon.confirmed {
+            color: #d32f2f;
+        }
+
+        .injury-icon.possible {
+            color: #f57c00;
+        }
+
+        .injury-details {
+            flex-grow: 1;
+            min-width: 0;
+        }
+
+        .injury-entry .player-name {
+            font-weight: 600;
+            color: #1976d2;
+            margin-bottom: 2px;
+            line-height: 1.2;
+        }
+
+        .injury-entry .injury-type {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 2px;
+            line-height: 1.2;
+        }
+
+        .injury-entry.confirmed .injury-type {
+            color: #d32f2f;
+        }
+
+        .injury-entry.possible .injury-type {
+            color: #f57c00;
+        }
+
+        .return-timeline {
+            background: #e8f5e8;
+            color: #2e7d32;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            font-weight: 500;
+            margin-bottom: 2px;
+            display: inline-block;
+        }
+
+        .return-timeline.day-to-day {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .return-timeline.weeks {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .return-timeline.long-term {
+            background: #ffebee;
+            color: #d32f2f;
+        }
+
+        .return-timeline.season-ending {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .injury-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.7em;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        .injury-date {
+            font-style: italic;
+        }
+
+        .injury-source {
+            font-weight: 500;
+        }
+
+        .confidence {
+            background: #e8f5e8;
+            color: #2e7d32;
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-size: 0.7em;
+            font-weight: 500;
+        }
+
+        .no-team-injuries {
+            text-align: center;
+            padding: 15px 5px;
+            color: #4caf50;
+            font-style: italic;
+            font-size: 0.8em;
+        }
+
+        .no-injuries {
+            text-align: center;
+            padding: 30px;
+            color: #4caf50;
+            font-size: 1.1em;
+        }
+
+        .source-info {
+            text-align: center;
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            color: #666;
+            font-size: 0.85em;
+        }
+
+        @media (max-width: 1200px) {
+            .team-grid {
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            }
+
+            .team-card {
+                height: 200px;
+                font-size: 0.8em;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .stats {
+                flex-direction: column;
+            }
+
+            .legend {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .team-grid {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                gap: 6px;
+            }
+
+            .team-card {
+                height: 180px;
+                font-size: 0.75em;
+            }
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏒 NHL Injury Feed</h1>
+        <p>Confirmed injuries + Possible injury detection • Chronological order</p>
+    </div>
+
+    <div class="stats">
+        <div class="stat-card">
+            <div class="stat-number">{{ data.total_count }}</div>
+            <div class="stat-label">Confirmed Injuries</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number possible">{{ data.possible_count or 0 }}</div>
+            <div class="stat-label">Possible Injuries</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ data.by_team|length }}</div>
+            <div class="stat-label">Teams Affected</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">32</div>
+            <div class="stat-label">Teams Visible</div>
+        </div>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item">
+            <span style="color: #d32f2f; font-weight: bold;">🏥</span>
+            <span>Confirmed Injury (Official Report)</span>
+        </div>
+        <div class="legend-item">
+            <span style="color: #f57c00; font-weight: bold;">⚠️</span>
+            <span>Possible Injury (Low Ice Time)</span>
+        </div>
+    </div>
+
+    {% if data.last_updated %}
+    <div class="last-updated">
+        📅 Last Updated: {{ data.formatted_time }} • Most recent injuries shown first
+    </div>
+    {% endif %}
+
+    <div class="refresh-info">
+        🔄 Auto-refresh every hour
+        <a href="/api/refresh" class="manual-refresh">Manual Refresh</a>
+        <a href="/api/injuries" class="manual-refresh">JSON Data</a>
+    </div>
+
+    {% if data.team_grid %}
+        <!-- Ultra Compact Team Grid - All Teams Visible -->
+        <div class="team-grid">
+            {% for team in data.team_grid %}
+            <div class="team-card">
+                <div class="team-info">
+                    <div class="team-logo">{{ team.logo }}</div>
+                    <div class="team-name">{{ team.name }}</div>
+                    <div class="injury-counts">
+                        {% if team.injury_count > 0 %}
+                        <span class="confirmed-count">{{ team.injury_count }} confirmed</span>
+                        {% endif %}
+                        {% if team.possible_count > 0 %}
+                        {% if team.injury_count > 0 %} | {% endif %}
+                        <span class="possible-count">{{ team.possible_count }} possible</span>
+                        {% endif %}
+                        {% if team.injury_count == 0 and team.possible_count == 0 %}
+                        <span style="color: #4caf50;">Healthy</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="team-injuries">
+                    {% for injury in team.confirmed_injuries %}
+                    <div class="injury-entry confirmed">
+                        <div class="injury-icon confirmed">🏥</div>
+                        <div class="injury-details">
+                            <div class="player-name">{{ injury.player }}</div>
+                            <div class="injury-type">{{ injury.injury_date or injury.injury_type }}</div>
+                            {% if injury.return_timeline %}
+                            <div class="return-timeline
+                                {% if 'day-to-day' in injury.return_timeline.lower() %}day-to-day
+                                {% elif 'week' in injury.return_timeline.lower() %}weeks
+                                {% elif 'season' in injury.return_timeline.lower() or 'ltir' in injury.return_timeline.lower() %}season-ending
+                                {% elif 'month' in injury.return_timeline.lower() or 'long-term' in injury.return_timeline.lower() %}long-term
+                                {% endif %}">
+                                {{ injury.return_timeline }}
+                            </div>
+                            {% endif %}
+                            <div class="injury-meta">
+                                {% if injury.formatted_date %}
+                                <span class="injury-date">{{ injury.formatted_date }}</span>
+                                {% endif %}
+                                <span class="injury-source">{{ injury.source or 'Official' }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    {% for injury in team.possible_injuries %}
+                    <div class="injury-entry possible">
+                        <div class="injury-icon possible">⚠️</div>
+                        <div class="injury-details">
+                            <div class="player-name">{{ injury.player }}</div>
+                            <div class="injury-type">{{ injury.reason }}</div>
+                            {% if injury.return_timeline %}
+                            <div class="return-timeline">{{ injury.return_timeline }}</div>
+                            {% endif %}
+                            <div class="injury-meta">
+                                {% if injury.formatted_date %}
+                                <span class="injury-date">{{ injury.formatted_date }}</span>
+                                {% endif %}
+                                {% if injury.confidence %}
+                                <span class="confidence">{{ injury.confidence }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    {% if team.injury_count == 0 and team.possible_count == 0 %}
+                    <div class="no-team-injuries">
+                        ✅ No injuries detected
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="no-injuries">
+            ✅ No current injuries reported
+        </div>
+    {% endif %}
+
+    <div class="source-info">
+        📊 Confirmed: Hockey-Reference.com | Possible: NHL Stats API (Ice Time Analysis)
+        <br>
+        🔄 Updates every hour automatically • Injuries sorted by date (newest first)
+        <br>
+        💻 <a href="https://github.com/jakehari/nhl-injury-feed" style="color: #1976d2;">View Source Code</a>
+    </div>
+
+    <script>
+        // Add loading state for manual refresh
+        document.addEventListener('DOMContentLoaded', function() {
+            const refreshLinks = document.querySelectorAll('a[href="/api/refresh"]');
+            refreshLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    this.textContent = 'Refreshing...';
+                    fetch('/api/refresh')
+                        .then(() => {
+                            window.location.reload();
+                        })
+                        .catch(() => {
+                            this.textContent = 'Refresh Failed';
+                            setTimeout(() => {
+                                this.textContent = 'Manual Refresh';
+                            }, 2000);
+                        });
+                });
+            });
+        });
+    </script>
+</body>
+</html>
